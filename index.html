@@ -39,11 +39,15 @@
   aside .hd b{font-size:13px}
   aside .body{flex:1;overflow:auto;padding:12px 14px 20px}
   .row{display:flex;gap:8px;align-items:center;margin-bottom:9px}
-  .row label{flex:0 0 46px;font-size:12px;color:var(--muted)}
+  .row label{flex:0 0 56px;font-size:12px;color:var(--muted);white-space:nowrap}
   .row input[type=text],.row input[type=date],.row textarea{flex:1;min-width:0;background:var(--field);border-color:var(--field-bd);padding:5px 8px}
   .row textarea{resize:vertical;min-height:70px;line-height:1.6}
   .swatches{display:flex;gap:6px;flex-wrap:wrap}
   .sw{width:18px;height:18px;border-radius:50%;cursor:pointer;border:2px solid transparent}
+  .sw.custom{border:1.5px dashed var(--muted);background:conic-gradient(#f2777a,#e6b455,#4ec9a5,#56b6c2,#7c8cff,#b48ef0,#f2777a);position:relative;overflow:hidden}
+  .sw.custom.on{border-style:solid;border-color:var(--text)}
+  input[type=range]{flex:1;min-width:0;accent-color:var(--accent);background:none;border:0;padding:0}
+  .lenval{font-size:11px;color:var(--muted);flex:0 0 42px;text-align:right}
   .sw.on{border-color:var(--text);box-shadow:0 0 0 2px var(--bg) inset}
   .btn{font-size:12px;padding:5px 10px;border-radius:6px;border:1px solid var(--btn-bd);
     background:var(--btn);color:var(--text);cursor:pointer;font-family:inherit}
@@ -64,6 +68,7 @@
 
   /* ---- SVG ---- */
   #spine{stroke:var(--axis);stroke-width:6;stroke-linecap:round;filter:drop-shadow(0 0 7px rgba(124,140,255,.28))}
+  #spineArrow{fill:var(--axis)}
   .tick{stroke:var(--line);stroke-width:1;opacity:.65}
   .tick-t{fill:var(--muted);font-size:11px;text-anchor:middle}
   .tick-y{fill:var(--muted);font-size:10.5px;text-anchor:middle;letter-spacing:.5px;opacity:.85}
@@ -109,6 +114,7 @@
       <svg id="svg">
         <g id="world">
           <line id="spine" y1="0" y2="0"></line>
+          <path id="spineArrow"></path>
           <g id="bands"></g>
           <g id="ticks"></g>
           <g id="markers"></g>
@@ -137,7 +143,7 @@
    side: auto | up | down
    ============================================================ */
 const LS_KEY = 'timeline.app.v1';
-const COLORS = ['#7c8cff','#4ec9a5','#ffa94d','#f2777a','#b48ef0','#56b6c2','#e6b455','#9aa4b2'];
+const COLORS = ['#7c8cff','#9aa4b2','#4ec9a5','#56b6c2','#e6b455','#ffa94d','#f2777a','#e05c8a','#b48ef0','#8f7cf0','#5f8dd6','#3fa9a0','#a3c14a','#d98e4a','#c95b5b','#6f6f8f'];
 const DAY = 86400000;
 
 const $ = id => document.getElementById(id);
@@ -161,7 +167,7 @@ const uid = () => Math.random().toString(36).slice(2, 9);
 const cur = () => DB.lists.find(l => l.id === curId);
 
 function newList(name){
-  const l = { id: uid(), name: name || '新时间轴', events: [], phases: [], markers: [] };
+  const l = { id: uid(), name: name || '新时间轴', events: [], phases: [], markers: [], markerLen: 140 };
   DB.lists.push(l); curId = l.id; return l;
 }
 function loadDB(){
@@ -188,6 +194,7 @@ function loadDB(){
   // 兼容旧数据
   for (const l of DB.lists){
     if (!Array.isArray(l.markers)) l.markers = [];
+    if (typeof l.markerLen !== 'number' || !(l.markerLen > 0)) l.markerLen = 140;
     for (const e of (l.events || [])){
       if (e.side !== 'up' && e.side !== 'down') e.dist = e.dist;
       else if (typeof e.dist !== 'number' || !(e.dist > 0)) e.dist = 80;
@@ -264,6 +271,7 @@ function layout(){
         x2: p.end ? 60 + (toT(p.end) - t0) / DAY * kx : 0 })),
       markers: (l.markers || []).map(m => Object.assign({}, m, {
         x: 60 + (toT(m.date) - t0) / DAY * kx })),
+      markerLen: Math.max(40, Math.min(800, Number(l.markerLen) || 140)),
       kx, x0: 60, t0, tMin: lo, tMax: hi };
   return LAY;
 }
@@ -332,9 +340,13 @@ function renderChart(){
     }
   }
 
-  // 纵向范围（标记线 + 连线都收敛到内容）
-  const ys = evs.map(e => e.y + (e.sign > 0 ? -BOXH/2 : BOXH/2)).concat([0]);
-  const top = Math.min(-60, ...ys) - 30, bot = Math.max(60, ...ys) + 30;
+  // 轴末端箭头
+  const arrow = $('spineArrow');
+  arrow.setAttribute('d', 'M ' + maxX + ' -10 L ' + (maxX + 17) + ' 0 L ' + maxX + ' 10 Z');
+
+  // 标记线：统一长度，从轴上下各延伸 LAY.markerLen
+  const mlen = LAY.markerLen;
+  const top = -mlen, bot = mlen;
 
   // 自定义标记线（虚线，用于划分阶段）
   for (const m of LAY.markers){
@@ -342,7 +354,7 @@ function renderChart(){
     g.dataset.id = m.id;
     g.style.cursor = 'ew-resize';
     g.appendChild(el('line', {class:'mk-line', x1:m.x, x2:m.x, y1:top, y2:bot, stroke:m.color}));
-    const t = el('text', {class:'mk-t', x:m.x, y:top - 8, fill:m.color});
+    const t = el('text', {class:'mk-t', x:m.x, y:top - 9, fill:m.color});
     t.textContent = m.name || '标记';
     g.appendChild(t);
     g.addEventListener('pointerdown', ev => startMarkerDrag(ev, m, g));
@@ -444,7 +456,19 @@ function renderPanel(){
       + '<span class="d">' + m.date + '</span>'
       + '<span class="x" data-delmk="' + m.id + '">×</span></div>').join('')
     : '<div class="empty">没有标记。点「＋标记」加一条竖虚线，用来划阶段边界。</div>';
+  const mlen = Math.max(40, Math.min(800, Number(l.markerLen) || 140));
+  html += '<h4 class="sec">全局设置</h4>'
+    + '<div class="row" style="align-items:center"><label>标记长度</label>'
+    + '<input type="range" data-g="markerLen" min="40" max="800" step="10" value="' + mlen + '">'
+    + '<span class="lenval">' + mlen + '</span></div>'
+    + '<div style="font-size:11px;color:var(--muted);line-height:1.7">所有标记共用这一个长度，从轴向上、下各延伸同样距离；和事件离轴多远互不影响。</div>';
   body.innerHTML = html;
+  const rng = body.querySelector('input[data-g=markerLen]');
+  if (rng) rng.oninput = () => {
+    l.markerLen = Math.max(40, Math.min(800, Number(rng.value) || 140));
+    const lb = body.querySelector('.lenval'); if (lb) lb.textContent = rng.value;
+    renderChart(); save();
+  };
   body.onclick = ev => {
     const d = ev.target.dataset;
     if (d.del){ l.events = l.events.filter(x => x.id !== d.del); renderChart(); renderPanel(); save(); return; }
@@ -477,8 +501,11 @@ function rowDist(v){
   return '<div class="row"><label>距离</label><input type="number" data-f="dist" min="34" max="1200" step="4" value="' + Math.round(val) + '" style="flex:1"><span style="font-size:11px;color:var(--muted)">px（也可直接拖动节点）</span></div>';
 }
 function rowColor(v, on){
-  return '<div class="row" style="align-items:center"><label>颜色</label><div class="swatches" data-f="color">'
-    + COLORS.map(c => '<span class="sw' + (c === v ? ' on' : '') + '" data-c="' + c + '" style="background:' + c + '"></span>').join('')
+  const custom = !!v && COLORS.indexOf(v) < 0;
+  return '<div class="row" style="align-items:flex-start"><label style="padding-top:4px">颜色</label><div class="swatches" data-f="color">'
+    + COLORS.map(c => '<span class="sw' + (c === v ? ' on' : '') + '" data-c="' + c + '" title="' + c + '" style="background:' + c + '"></span>').join('')
+    + '<span class="sw custom' + (custom ? ' on' : '') + '"' + (custom ? ' style="background:' + v + '"' : '') + ' title="自定义颜色">'
+    + '<input type="color" data-custom value="' + (custom ? v : '#7c8cff') + '" style="opacity:0;width:100%;height:100%;cursor:pointer;border:0;padding:0;display:block"></span>'
     + '</div></div>';
 }
 
@@ -489,8 +516,17 @@ function wirePanel(target){
     const f = inp.dataset.f;
     if (f === 'color'){
       inp.querySelectorAll('.sw').forEach(sw => sw.onclick = () => {
+        if (!sw.dataset.c) return;              // 自定义格由取色器处理
         target.color = sw.dataset.c;
         inp.querySelectorAll('.sw').forEach(s => s.classList.toggle('on', s === sw));
+        renderChart(); save();
+      });
+      const picker = inp.querySelector('input[data-custom]');
+      if (picker) picker.addEventListener('input', () => {
+        target.color = picker.value;
+        const tile = picker.closest('.sw');
+        inp.querySelectorAll('.sw').forEach(s => s.classList.toggle('on', s === tile));
+        tile.style.background = picker.value;
         renderChart(); save();
       });
       return;
@@ -643,7 +679,11 @@ function startNodeDrag(ev, e, g){
 }
 
 function fitView(){
+  const mk = $('markers');
+  const prevDisp = mk.style.display;
+  mk.style.display = 'none';              // display:none 才真正排除出 getBBox
   const box = world.getBBox();
+  mk.style.display = prevDisp || '';
   const w = stage.clientWidth, h = stage.clientHeight;
   const k = Math.max(0.5, Math.min((w - 70) / Math.max(1, box.width), (h - 70) / Math.max(1, box.height), 1.4));
   view.k = k;
@@ -664,6 +704,7 @@ function svgExportString(){
   const style = '<style>'
     + 'text{font-family:"Microsoft YaHei UI","Segoe UI",sans-serif}'
     + '#spine{stroke:' + axis + ';stroke-width:6;stroke-linecap:round}'
+    + '#spineArrow{fill:' + axis + '}'
     + '.tick{stroke:' + line + ';stroke-width:1;opacity:.65}'
     + '.tick-t{fill:' + muted + ';font-size:11px;text-anchor:middle}'
     + '.tick-y{fill:' + muted + ';font-size:10.5px;text-anchor:middle;opacity:.85}'

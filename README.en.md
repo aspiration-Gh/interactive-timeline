@@ -12,8 +12,9 @@ A **double-click-and-use** interactive timeline in a single HTML file. Zero depe
 - **Multiple timelines**: switch / create / rename / delete from the top dropdown; data lives in `localStorage` with JSON export
 - **Flat structure**: event points plus optional "phase" bands — no parent/child hierarchy
 - **Free placement**: each event can sit above or below the axis at any distance; in auto mode they alternate and stagger when dates are close
-- **Vertical connectors**: a straight stem drops from the date on the axis to the event box, which is centered on its date
-- **Phase dividers**: add any number of dashed markers, name them, color them, drag them to another date
+- **Vertical connectors + arrow**: a straight stem drops from the date on the axis to the event box, centered on its date; the axis ends with a solid arrowhead in the axis color
+- **Phase dividers**: add any number of dashed markers, name them, color them, drag them to another date; **all markers share one length** (a slider under "Global settings" on the right, extending equally above and below the axis), independent of how far events sit from the axis
+- **16 colors + custom picker**: events, phases and markers all take any color; the last swatch opens the system color picker for any hex value
 - **Direct editing**: click the axis to insert an event at that date; drag an event sideways to change its date, vertically to flip side and distance; edit title / note / color in the side panel
 - **PNG export**: exports the whole timeline at 2x, background follows the current theme
 - **Dark / light theme**: one click in the header
@@ -38,6 +39,7 @@ Nothing to install.
 | Wheel | Zoom around the cursor |
 | Double-click empty space | Fit the whole timeline |
 | Click event / band / marker | Open its form in the side panel |
+| "Global settings" at the bottom of the list panel | Set the shared marker length (40–800, remembered per timeline) |
 | `0` / `+` / `-` / `Esc` | Fit / zoom in / zoom out / deselect |
 
 ## Data format
@@ -60,7 +62,8 @@ Stored under the `timeline.app.v1` key in `localStorage`, exportable as JSON:
       ],
       "markers": [
         { "id": "m1", "name": "Month end", "date": "2026-11-17", "color": "#f2777a" }
-      ]
+      ],
+      "markerLen": 140
     }
   ]
 }
@@ -68,6 +71,8 @@ Stored under the `timeline.app.v1` key in `localStorage`, exportable as JSON:
 
 - `side`: `auto` (alternate) / `up` / `down`
 - `dist`: distance in pixels from the axis to the event center; only used when `side` is `up` / `down`
+- `markerLen`: how far marker lines extend above and below the axis (one shared value, default 140)
+- `color`: any `#rrggbb`; 16 built-in swatches plus a custom picker
 
 ## How it works
 
