@@ -4,9 +4,9 @@ English | [中文](README.md)
 
 A **double-click-and-use** interactive timeline in a single HTML file. Zero dependencies, no build step, works offline. Lay out a plan with the mouse in the browser and export a PNG for notes or sharing.
 
-![dark theme](screenshots/preview-dark.png)
+![dark theme](screenshots/timeline-dark.png)
 
-![light theme](screenshots/preview-light.png)
+![light theme](screenshots/timeline-light.png)
 
 ## Features
 
