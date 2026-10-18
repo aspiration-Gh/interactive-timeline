@@ -91,9 +91,21 @@ flowchart LR
 | Zoom | anchor at the cursor by adjusting `translate + scale`, clamped to 0.25–3.2 |
 | PNG export | clone the `world` group, inject inline `<style>` with resolved CSS variables, serialize to SVG → `img` → canvas 2x → Blob |
 
+## Exporting images and the Windows security prompt
+
+When the app is opened **from a local file** (`file://`), a browser download gets the region mark `ZoneId=4` (Restricted sites). Windows then treats the file as blocked and shows "blocked by Windows Security" when you open it.
+
+The app now calls the **File System Access API** (`showSaveFilePicker`) first, so the browser **writes the file directly to disk** — no download pipeline, no region mark, nothing gets blocked. Only browsers without the API (e.g. Firefox) fall back to a normal download.
+
+To unblock files you already have:
+
+- Right-click the file → Properties → tick **Unblock** at the bottom → OK
+- PowerShell: `Get-ChildItem "$HOME\Downloads\*.png" | Unblock-File`
+
 ## Limitations
 
 - Data lives in **browser storage**: switching browsers, clearing site data or private mode loses it — export JSON for backup
+- With `showSaveFilePicker` you pick a save location once; browsers without it download directly (and may trigger the region-mark prompt above)
 - Some browsers block storage on `file://`; the app then shows a banner and only JSON backup works
 - Day-level precision only, no hours/minutes
 - No Markdown import, no multi-lane Gantt view

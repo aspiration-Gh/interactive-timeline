@@ -91,9 +91,21 @@ flowchart LR
 | 缩放 | 以光标为锚点调整 `translate + scale`，缩放范围 0.25–3.2 |
 | 导出 PNG | `world` 组克隆后注入内联 `<style>`（颜色取自已解析的 CSS 变量），序列化成 SVG → `img` → canvas 2x → Blob |
 
+## 导出图片与 Windows 的「安全中心」提示
+
+从**本地双击打开**（`file://`）时，浏览器给下载的文件打上的区域标记是 `ZoneId=4`（受限制站点），Windows 会因此认为文件「被阻止」，打开时弹「安全中心已阻止此文件」。
+
+现在的做法是：导出优先调用 **File System Access API**（`showSaveFilePicker`），让浏览器**直接写盘**，不经过下载流水线，因此不会产生任何区域标记，也不会被拦。只有浏览器不支持该 API（如 Firefox）时才退回普通下载。
+
+如果已经有被拦的旧文件，任选一种解除：
+
+- 右键文件 → 属性 → 底部勾选「解除锁定」→ 确定
+- PowerShell：`Get-ChildItem "$HOME\Downloads\*.png" | Unblock-File`
+
 ## 已知限制
 
 - 数据存在**浏览器本地**。换浏览器、清站点数据、隐私模式都会丢；重要内容请定期「备份 JSON」
+- 导出走 `showSaveFilePicker` 时需要你选一次保存位置；不支持的浏览器会直接下载（此时可能触发上面的区域标记提示）
 - 双击打开（`file://`）时 storage 被禁的浏览器会顶部提示，此时只能用 JSON 备份
 - 时间精度到天，不支持时分
 - 不支持导入 Markdown、不支持甘特式多泳道
