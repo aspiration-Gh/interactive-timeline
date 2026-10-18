@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>时间轴 · Timeline</title>
+<style>
+  :root{
+    --bg:#1b1b1f; --panel:#20202a; --line:#3a3a46; --text:#e4e4ea; --muted:#8a8a99;
+    --node-bg:#24242c; --node-sel:#2c2c3c; --btn:#26262c; --btn-bd:#3a3a44;
+    --field:#1a1a20; --field-bd:#34343f; --accent:#7c8cff; --axis:#9aa3b8;
+  }
+  body[data-theme="light"]{
+    --bg:#f6f6fa; --panel:#fff; --line:#d4d4dd; --text:#22222b; --muted:#7a7a88;
+    --node-bg:#fff; --node-sel:#eef0ff; --btn:#fff; --btn-bd:#d4d4dd;
+    --field:#fff; --field-bd:#d4d4dd; --accent:#5b6cf0; --axis:#7d869c;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:"Microsoft YaHei UI","Segoe UI",sans-serif;overflow:hidden}
+  #app{display:flex;flex-direction:column;height:100%}
+  header{display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--line);flex:0 0 auto;flex-wrap:wrap}
+  header .brand{font-size:13px;font-weight:600;margin-right:4px;white-space:nowrap}
+  header select,header button,input,textarea,select{
+    font-family:inherit;font-size:12px;color:var(--text);background:var(--btn);
+    border:1px solid var(--btn-bd);border-radius:6px;padding:4px 8px;outline:none}
+  header select{max-width:190px}
+  header button{cursor:pointer}
+  header button:hover{border-color:var(--accent);color:var(--accent)}
+  header .sep{width:1px;height:18px;background:var(--line);margin:0 4px}
+  header .grow{flex:1}
+  header .hint{font-size:11px;color:var(--muted);white-space:nowrap}
+  main{flex:1;display:flex;min-height:0}
+  #stage{flex:1;min-width:0;position:relative;overflow:hidden;cursor:grab;background:var(--bg)}
+  #stage.dragging{cursor:grabbing}
+  svg{display:block;width:100%;height:100%}
+  aside{flex:0 0 320px;border-left:1px solid var(--line);background:var(--panel);
+    display:flex;flex-direction:column;min-height:0}
+  aside .hd{padding:10px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+  aside .hd b{font-size:13px}
+  aside .body{flex:1;overflow:auto;padding:12px 14px 20px}
+  .row{display:flex;gap:8px;align-items:center;margin-bottom:9px}
+  .row label{flex:0 0 46px;font-size:12px;color:var(--muted)}
+  .row input[type=text],.row input[type=date],.row textarea{flex:1;min-width:0;background:var(--field);border-color:var(--field-bd);padding:5px 8px}
+  .row textarea{resize:vertical;min-height:70px;line-height:1.6}
+  .swatches{display:flex;gap:6px;flex-wrap:wrap}
+  .sw{width:18px;height:18px;border-radius:50%;cursor:pointer;border:2px solid transparent}
+  .sw.on{border-color:var(--text);box-shadow:0 0 0 2px var(--bg) inset}
+  .btn{font-size:12px;padding:5px 10px;border-radius:6px;border:1px solid var(--btn-bd);
+    background:var(--btn);color:var(--text);cursor:pointer;font-family:inherit}
+  .btn:hover{border-color:var(--accent);color:var(--accent)}
+  .btn.danger:hover{border-color:#f2777a;color:#f2777a}
+  .btn.primary{border-color:var(--accent);color:var(--accent)}
+  .item{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:6px;cursor:pointer;font-size:12.5px}
+  .item:hover{background:var(--node-sel)}
+  .item.on{background:var(--node-sel);box-shadow:0 0 0 1px var(--accent) inset}
+  .item .dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+  .item .d{color:var(--muted);font-size:11px;margin-left:auto;flex:0 0 auto}
+  .item .x{color:var(--muted);font-size:12px;padding:0 2px}
+  .item .x:hover{color:#f2777a}
+  .item .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .empty{color:var(--muted);font-size:12px;line-height:1.8}
+  h4.sec{font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.5px;margin:16px 0 6px}
+  h4.sec:first-child{margin-top:0}
+
+  /* ---- SVG ---- */
+  #spine{stroke:var(--axis);stroke-width:6;stroke-linecap:round;filter:drop-shadow(0 0 7px rgba(124,140,255,.28))}
+  .tick{stroke:var(--line);stroke-width:1;opacity:.65}
+  .tick-t{fill:var(--muted);font-size:11px;text-anchor:middle}
+  .tick-y{fill:var(--muted);font-size:10.5px;text-anchor:middle;letter-spacing:.5px;opacity:.85}
+  .mk-line{stroke-width:1.8;stroke-dasharray:6 5;stroke-opacity:.9}
+  .mk:hover .mk-line{stroke-opacity:1;stroke-width:2.6}
+  .mk.sel .mk-line{stroke-opacity:1;stroke-width:2.6}
+  .mk-t{font-size:11px;font-weight:600;text-anchor:middle}
+  .band{opacity:.3}
+  .band-t{font-size:12px;font-weight:600}
+  .stem{stroke-width:2;stroke-opacity:.65;stroke-linecap:round}
+  .knob{stroke-width:2}
+  .node{cursor:grab}
+  .node rect.box{stroke-width:1.4;stroke-opacity:.6;filter:drop-shadow(0 2px 5px rgba(0,0,0,.22))}
+  .node:hover rect.box{stroke-opacity:1}
+  .node.sel rect.box{stroke-opacity:1;stroke-width:2}
+  .node text.t{font-size:13px}
+  .node text.d{font-size:10.5px}
+</style>
+</head>
+<body data-theme="dark">
+<div id="app">
+  <header>
+    <span class="brand">时间轴</span>
+    <select id="listSel" title="切换时间轴"></select>
+    <button data-act="newList" title="新建一份时间轴">＋新建</button>
+    <button data-act="renameList">重命名</button>
+    <button data-act="delList">删除</button>
+    <span class="sep"></span>
+    <button data-act="fit">全览</button>
+    <button data-act="today">今天</button>
+    <button data-act="in">放大</button>
+    <button data-act="out">缩小</button>
+    <span class="sep"></span>
+    <button data-act="png" title="导出整张时间轴为 PNG">导出图片</button>
+    <button data-act="jsonOut">备份 JSON</button>
+    <button data-act="jsonIn">导入 JSON</button>
+    <button data-act="theme">浅色</button>
+    <span class="grow"></span>
+    <span class="hint">点轴线插节点 · 节点左右拖改日期／上下拖改边与距离 · 标记线左右拖改日期 · 滚轮缩放 · 拖空白平移</span>
+  </header>
+  <main>
+    <div id="stage">
+      <svg id="svg">
+        <g id="world">
+          <line id="spine" y1="0" y2="0"></line>
+          <g id="bands"></g>
+          <g id="ticks"></g>
+          <g id="markers"></g>
+          <g id="links"></g>
+          <g id="nodes"></g>
+        </g>
+      </svg>
+    </div>
+    <aside>
+      <div class="hd"><b id="panelTitle">事件</b><span class="grow" style="flex:1"></span>
+        <button class="btn" id="btnAddEvent">＋事件</button>
+        <button class="btn" id="btnAddPhase">＋阶段</button>
+        <button class="btn" id="btnAddMark">＋标记</button>
+      </div>
+      <div class="body" id="panelBody"></div>
+    </aside>
+  </main>
+</div>
+<input type="file" id="fileIn" accept=".json,application/json" style="display:none">
+
+<script>
+/* ============================================================
+   数据结构（存在浏览器 localStorage，可导出 JSON 备份）
+   { lists:[ { id, name, events:[{id,title,date,note,side,color}],
+               phases:[{id,name,start,end,color}] } ] }
+   side: auto | up | down
+   ============================================================ */
+const LS_KEY = 'timeline.app.v1';
+const COLORS = ['#7c8cff','#4ec9a5','#ffa94d','#f2777a','#b48ef0','#56b6c2','#e6b455','#9aa4b2'];
+const DAY = 86400000;
+
+const $ = id => document.getElementById(id);
+const stage = $('stage'), svg = $('svg'), world = $('world');
+const NS = 'http://www.w3.org/2000/svg';
+
+const isDark = () => document.body.dataset.theme !== 'light';
+const cssVar = n => getComputedStyle(document.body).getPropertyValue(n).trim();
+
+/* ---------- 日期工具 ---------- */
+const pad = n => String(n).padStart(2, '0');
+const toT = s => new Date(s + 'T00:00:00').getTime();
+const fromT = t => { const d = new Date(t); return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()); };
+const todayStr = () => fromT(Date.now());
+const fmtMD = s => s.slice(5).replace('-', '/');
+
+/* ---------- 数据 ---------- */
+let DB = { lists: [] };
+let curId = null;
+const uid = () => Math.random().toString(36).slice(2, 9);
+const cur = () => DB.lists.find(l => l.id === curId);
+
+function newList(name){
+  const l = { id: uid(), name: name || '新时间轴', events: [], phases: [], markers: [] };
+  DB.lists.push(l); curId = l.id; return l;
+}
+function loadDB(){
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw){ const o = JSON.parse(raw); if (o && Array.isArray(o.lists)) DB = o; }
+  } catch (e) {}
+  if (!DB.lists.length){
+    const l = newList('示例时间轴');
+    const now = Date.now();
+    const d = n => fromT(now + n * DAY);
+    l.events = [
+      { id: uid(), title: '起步', date: d(-10), note: '这是示例数据，改或删都行。上下拖动能换边和远近。', side: 'up', dist: 90, color: COLORS[0] },
+      { id: uid(), title: '现在', date: d(0), note: '', side: 'down', dist: 96, color: COLORS[1] },
+      { id: uid(), title: '中期检查', date: d(21), note: '', side: 'up', dist: 168, color: COLORS[2] },
+      { id: uid(), title: '收尾', date: d(45), note: '', side: 'down', dist: 150, color: COLORS[4] }
+    ];
+    l.phases = [{ id: uid(), name: '第一阶段', start: d(0), end: d(30), color: COLORS[0] }];
+    l.markers = [
+      { id: uid(), name: '月中检查', date: d(15), color: COLORS[2] },
+      { id: uid(), name: '月底收口', date: d(30), color: COLORS[3] }
+    ];
+  }
+  // 兼容旧数据
+  for (const l of DB.lists){
+    if (!Array.isArray(l.markers)) l.markers = [];
+    for (const e of (l.events || [])){
+      if (e.side !== 'up' && e.side !== 'down') e.dist = e.dist;
+      else if (typeof e.dist !== 'number' || !(e.dist > 0)) e.dist = 80;
+    }
+  }
+  if (!DB.lists.some(l => l.id === curId)) curId = DB.lists[0].id;
+}
+let saveTimer = null;
+function save(){ clearTimeout(saveTimer); saveTimer = setTimeout(() => {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(DB)); } catch (e) {}
+}, 250); }
+
+/* ---------- 视图变换 ---------- */
+const view = { x: 0, y: 0, k: 1 };
+function applyView(){ world.setAttribute('transform', 'translate(' + view.x + ',' + view.y + ') scale(' + view.k + ')'); }
+
+/* ---------- 布局 ---------- */
+const ROW0 = 80, ROW = 66, BOXH = 34, GAPX = 16;
+const ctx2d = document.createElement('canvas').getContext('2d');
+function textW(s, size){
+  ctx2d.font = size + 'px "Microsoft YaHei UI","Segoe UI",sans-serif';
+  return ctx2d.measureText(s).width;
+}
+
+let LAY = { events: [], phases: [], kx: 1, x0: 60, t0: 0, tMin: 0, tMax: 0 };
+
+function layout(){
+  const l = cur();
+  const evs = (l.events || []).slice().sort((a,b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+  const phs = l.phases || [];
+
+  let lo = Infinity, hi = -Infinity;
+  for (const e of evs){ const t = toT(e.date); lo = Math.min(lo, t); hi = Math.max(hi, t); }
+  for (const p of phs){
+    if (p.start) { const t = toT(p.start); lo = Math.min(lo, t); hi = Math.max(hi, t); }
+    if (p.end)   { const t = toT(p.end);   lo = Math.min(lo, t); hi = Math.max(hi, t); }
+  }
+  for (const m of (l.markers || [])){
+    if (m.date) { const t = toT(m.date); lo = Math.min(lo, t); hi = Math.max(hi, t); }
+  }
+  const now = toT(todayStr());
+  if (!isFinite(lo)){ lo = now - 30*DAY; hi = now + 30*DAY; }
+  const span = Math.max(7, (hi - lo) / DAY);
+  const kx = Math.min(30, Math.max(1.2, 900 / span));
+  const t0 = lo - Math.max(1, span * 0.04) * DAY;
+
+  const rows = { up: [], down: [] };
+  const out = [];
+  let auto = 0;
+  for (const e of evs){
+    const x = 60 + (toT(e.date) - t0) / DAY * kx;
+    const w = Math.max(76, textW(e.title || '未命名', 13) + textW(fmtMD(e.date), 10.5) + 40);
+    const explicit = (e.side === 'up' || e.side === 'down');
+    let side;
+    if (explicit) side = e.side;
+    else { side = (auto % 2 === 0) ? 'up' : 'down'; auto++; }
+    const sign = side === 'up' ? -1 : 1;
+    let dist;
+    if (explicit){
+      dist = Math.max(34, Math.min(1200, Number(e.dist) || ROW0));
+    } else {
+      const r = rows[side];
+      let row = 0;
+      while (r[row] !== undefined && r[row] + GAPX > x) row++;
+      r[row] = x + w;
+      dist = ROW0 + row * ROW;
+    }
+    out.push(Object.assign({}, e, { x, w, side, sign, dist, y: sign * dist }));
+  }
+
+  LAY = { events: out,
+      phases: phs.map(p => Object.assign({}, p, {
+        x1: p.start ? 60 + (toT(p.start) - t0) / DAY * kx : 0,
+        x2: p.end ? 60 + (toT(p.end) - t0) / DAY * kx : 0 })),
+      markers: (l.markers || []).map(m => Object.assign({}, m, {
+        x: 60 + (toT(m.date) - t0) / DAY * kx })),
+      kx, x0: 60, t0, tMin: lo, tMax: hi };
+  return LAY;
+}
+
+/* ---------- 渲染 ---------- */
+function el(tag, attrs){
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) if (attrs[k] != null) e.setAttribute(k, attrs[k]);
+  return e;
+}
+
+let sel = null;      // {type:'event'|'phase', id}
+let dragging = null;
+
+function renderChart(){
+  layout();
+  ['ticks','bands','markers','links','nodes'].forEach(id => { $(id).innerHTML = ''; });
+
+  const dark = isDark();
+  const textC = cssVar('--text'), mutC = cssVar('--muted'), nodeBg = cssVar('--node-bg'), bgc = cssVar('--bg');
+
+  const evs = LAY.events;
+  const minX = evs.length || LAY.phases.length ? Math.min(LAY.x0 - 34,
+      ...evs.map(e => e.x), ...LAY.phases.filter(p => p.start).map(p => p.x1)) : LAY.x0;
+  const maxX = Math.max(...[100].concat(evs.map(e => e.x + e.w), LAY.phases.map(p => p.x2))) + 60;
+
+  // 月份刻度
+  const d0 = new Date(LAY.t0), d1 = new Date(Math.max(LAY.tMax, Date.now()));
+  const c = new Date(d0.getFullYear(), d0.getMonth() + 1, 1);
+  while (c.getTime() <= d1.getTime() + 15*DAY){
+    const x = LAY.x0 + (c.getTime() - LAY.t0) / DAY * LAY.kx;
+    if (x > maxX) break;
+    $('ticks').appendChild(el('line', {class:'tick', x1:x, y1:-17, x2:x, y2:17}));
+    const t1 = el('text', {class:'tick-t', x, y:38}); t1.textContent = (c.getMonth() + 1) + '月';
+    $('ticks').appendChild(t1);
+    if (c.getMonth() === 0){
+      const ty = el('text', {class:'tick-y', x, y:54}); ty.textContent = c.getFullYear() + '年';
+      $('ticks').appendChild(ty);
+    }
+    c.setMonth(c.getMonth() + 1);
+  }
+
+  // 主轴
+  const sp = $('spine');
+  sp.setAttribute('x1', minX); sp.setAttribute('x2', maxX);
+
+  // 阶段色带
+  for (const p of LAY.phases){
+    if (p.x2 <= p.x1) continue;
+    const r = el('rect', {class:'band', x:p.x1, y:-9, width:p.x2 - p.x1, height:18, rx:9, fill:p.color});
+    r.addEventListener('pointerdown', ev => { ev.stopPropagation(); select('phase', p.id); });
+    $('bands').appendChild(r);
+    if (p.x2 - p.x1 > 60){
+      const nm = p.name || '阶段';
+      const tw = textW(nm, 12), cx = (p.x1 + p.x2) / 2;
+      const pill = el('rect', {x:cx - tw/2 - 8, y:-32, width:tw + 16, height:18, rx:9,
+        fill:cssVar('--bg'), opacity:.9, stroke:p.color, 'stroke-opacity':.45});
+      pill.style.cursor = 'pointer';
+      pill.addEventListener('pointerdown', ev => { ev.stopPropagation(); select('phase', p.id); });
+      $('bands').appendChild(pill);
+      const t = el('text', {class:'band-t', x:cx, y:-18, fill:p.color, 'text-anchor':'middle'});
+      t.textContent = nm;
+      t.style.cursor = 'pointer';
+      t.addEventListener('pointerdown', ev => { ev.stopPropagation(); select('phase', p.id); });
+      $('bands').appendChild(t);
+    }
+  }
+
+  // 纵向范围（标记线 + 连线都收敛到内容）
+  const ys = evs.map(e => e.y + (e.sign > 0 ? -BOXH/2 : BOXH/2)).concat([0]);
+  const top = Math.min(-60, ...ys) - 30, bot = Math.max(60, ...ys) + 30;
+
+  // 自定义标记线（虚线，用于划分阶段）
+  for (const m of LAY.markers){
+    const g = el('g', {class:'mk' + (sel && sel.type === 'marker' && sel.id === m.id ? ' sel' : '')});
+    g.dataset.id = m.id;
+    g.style.cursor = 'ew-resize';
+    g.appendChild(el('line', {class:'mk-line', x1:m.x, x2:m.x, y1:top, y2:bot, stroke:m.color}));
+    const t = el('text', {class:'mk-t', x:m.x, y:top - 8, fill:m.color});
+    t.textContent = m.name || '标记';
+    g.appendChild(t);
+    g.addEventListener('pointerdown', ev => startMarkerDrag(ev, m, g));
+    $('markers').appendChild(g);
+  }
+
+  // 直线连接 + 节点（盒子以日期为中心）
+  for (const e of evs){
+    const edgeY = e.y + (e.sign > 0 ? -BOXH/2 : BOXH/2);
+    $('links').appendChild(el('line', {class:'stem', x1:e.x, y1:0, x2:e.x, y2:edgeY, stroke:e.color}));
+    $('links').appendChild(el('circle', {class:'knob', cx:e.x, cy:0, r:4, fill:bgc, stroke:e.color}));
+
+    const g = el('g', {class:'node' + (sel && sel.type === 'event' && sel.id === e.id ? ' sel' : '')});
+    g.dataset.id = e.id;
+    const x = e.x - e.w/2, y = e.y - BOXH/2;
+    const box = el('rect', {class:'box', x, y, width:e.w, height:BOXH, rx:9, fill:nodeBg, stroke:e.color});
+    if (sel && sel.type === 'event' && sel.id === e.id) box.setAttribute('fill', cssVar('--node-sel'));
+    g.appendChild(box);
+    const t = el('text', {class:'t', x:x + 11, y:e.y + 1, 'dominant-baseline':'central', fill:textC});
+    t.textContent = e.title || '未命名'; g.appendChild(t);
+    const dt = el('text', {class:'d', x:x + e.w - 10, y:e.y + 1.5, 'dominant-baseline':'central', 'text-anchor':'end', fill:mutC});
+    dt.textContent = fmtMD(e.date); g.appendChild(dt);
+    g.addEventListener('pointerdown', ev => startNodeDrag(ev, e, g));
+    $('nodes').appendChild(g);
+  }
+}
+
+/* ---------- 选区 / 面板 ---------- */
+function select(type, id){ sel = id ? { type, id } : null; renderChart(); renderPanel(); }
+
+function renderPanel(){
+  const l = cur(), body = $('panelBody'), ttl = $('panelTitle');
+  if (sel && sel.type === 'event'){
+    const e = l.events.find(x => x.id === sel.id);
+    if (!e){ sel = null; return renderPanel(); }
+    ttl.textContent = '编辑事件';
+    body.innerHTML =
+      rowText('标题', e.title, v => { e.title = v; renderChart(); save(); renderListSnippet(); }) +
+      rowDate('日期', e.date, v => { e.date = v || e.date; renderChart(); save(); renderListSnippet(); }) +
+      rowNote('备注', e.note || '', v => { e.note = v; save(); }) +
+      rowSide(e.side || 'auto', v => { e.side = v; renderChart(); save(); }) +
+      rowDist(e.dist) +
+      rowColor(e.color, v => { e.color = v; renderChart(); save(); renderListSnippet(); }) +
+      '<div class="row" style="margin-top:14px"><button class="btn danger" id="btnDelEv">删除这个节点</button></div>';
+    $('btnDelEv').onclick = () => { l.events = l.events.filter(x => x.id !== e.id); sel = null; renderChart(); renderPanel(); save(); };
+    wirePanel(e);
+    return;
+  }
+  if (sel && sel.type === 'phase'){
+    const p = l.phases.find(x => x.id === sel.id);
+    if (!p){ sel = null; return renderPanel(); }
+    ttl.textContent = '编辑阶段';
+    body.innerHTML =
+      rowText('名称', p.name, v => { p.name = v; renderChart(); save(); renderListSnippet(); }) +
+      rowDate('开始', p.start, v => { p.start = v; renderChart(); save(); }) +
+      rowDate('结束', p.end, v => { p.end = v; renderChart(); save(); }) +
+      rowColor(p.color, v => { p.color = v; renderChart(); save(); }) +
+      '<div class="row" style="margin-top:14px"><button class="btn danger" id="btnDelPh">删除这个阶段</button></div>';
+    $('btnDelPh').onclick = () => { l.phases = l.phases.filter(x => x.id !== p.id); sel = null; renderChart(); renderPanel(); save(); };
+    wirePanel(p);
+    return;
+  }
+  if (sel && sel.type === 'marker'){
+    const m = l.markers.find(x => x.id === sel.id);
+    if (!m){ sel = null; return renderPanel(); }
+    ttl.textContent = '编辑标记';
+    body.innerHTML =
+      rowText('名称', m.name, v => { m.name = v; renderChart(); save(); }) +
+      rowDate('日期', m.date, v => { m.date = v || m.date; renderChart(); save(); }) +
+      rowColor(m.color, v => { m.color = v; renderChart(); save(); }) +
+      '<div class="row" style="margin-top:14px"><button class="btn danger" id="btnDelMk">删除这个标记</button></div>';
+    $('btnDelMk').onclick = () => { l.markers = l.markers.filter(x => x.id !== m.id); sel = null; renderChart(); renderPanel(); save(); };
+    wirePanel(m);
+    return;
+  }
+  ttl.textContent = '事件列表';
+  const evs = (l.events || []).slice().sort((a,b) => a.date < b.date ? -1 : 1);
+  let html = '<h4 class="sec">事件 ' + evs.length + '</h4>';
+  html += evs.length ? evs.map(e =>
+      '<div class="item" data-ev="' + e.id + '">'
+      + '<span class="dot" style="background:' + e.color + '"></span>'
+      + '<span class="nm">' + esc(e.title || '未命名') + '</span>'
+      + '<span class="d">' + e.date + '</span>'
+      + '<span class="x" data-del="' + e.id + '">×</span></div>').join('')
+    : '<div class="empty">还没有节点。点时间轴上的轴线插入一个，或点上方「＋事件」。</div>';
+  html += '<h4 class="sec">阶段 ' + (l.phases || []).length + '</h4>';
+  html += (l.phases || []).length ? l.phases.map(p =>
+      '<div class="item" data-ph="' + p.id + '">'
+      + '<span class="dot" style="background:' + p.color + '"></span>'
+      + '<span class="nm">' + esc(p.name || '阶段') + '</span>'
+      + '<span class="d">' + (p.start || '').slice(5) + '→' + (p.end || '').slice(5) + '</span>'
+      + '<span class="x" data-delph="' + p.id + '">×</span></div>').join('')
+    : '<div class="empty">没有阶段。阶段只是在轴上涂一段色带，不是层级。</div>';
+  html += '<h4 class="sec">标记 ' + (l.markers || []).length + '</h4>';
+  html += (l.markers || []).length ? l.markers.map(m =>
+      '<div class="item" data-mk="' + m.id + '">'
+      + '<span class="dot" style="background:' + m.color + '"></span>'
+      + '<span class="nm">' + esc(m.name || '标记') + '</span>'
+      + '<span class="d">' + m.date + '</span>'
+      + '<span class="x" data-delmk="' + m.id + '">×</span></div>').join('')
+    : '<div class="empty">没有标记。点「＋标记」加一条竖虚线，用来划阶段边界。</div>';
+  body.innerHTML = html;
+  body.onclick = ev => {
+    const d = ev.target.dataset;
+    if (d.del){ l.events = l.events.filter(x => x.id !== d.del); renderChart(); renderPanel(); save(); return; }
+    if (d.delph){ l.phases = l.phases.filter(x => x.id !== d.delph); renderChart(); renderPanel(); save(); return; }
+    if (d.delmk){ l.markers = l.markers.filter(x => x.id !== d.delmk); renderChart(); renderPanel(); save(); return; }
+    if (d.ev) select('event', d.ev);
+    if (d.ph) select('phase', d.ph);
+    if (d.mk) select('marker', d.mk);
+  };
+}
+function renderListSnippet(){ if (!sel) renderPanel(); }
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+
+function rowText(label, v, on){
+  return '<div class="row"><label>' + label + '</label><input type="text" data-f="text" value="' + esc(v || '') + '"></div>';
+}
+function rowDate(label, v, on){
+  return '<div class="row"><label>' + label + '</label><input type="date" data-f="date" value="' + (v || '') + '"></div>';
+}
+function rowNote(label, v, on){
+  return '<div class="row" style="align-items:flex-start"><label style="padding-top:6px">' + label + '</label><textarea data-f="note">' + esc(v) + '</textarea></div>';
+}
+function rowSide(v, on){
+  const opt = (val, t) => '<option value="' + val + '"' + (v === val ? ' selected' : '') + '>' + t + '</option>';
+  return '<div class="row"><label>位置</label><select data-f="side" style="flex:1">'
+    + opt('auto','自动（上下交替）') + opt('up','轴上方') + opt('down','轴下方') + '</select></div>';
+}
+function rowDist(v){
+  const val = (typeof v === 'number' && v > 0) ? v : 80;
+  return '<div class="row"><label>距离</label><input type="number" data-f="dist" min="34" max="1200" step="4" value="' + Math.round(val) + '" style="flex:1"><span style="font-size:11px;color:var(--muted)">px（也可直接拖动节点）</span></div>';
+}
+function rowColor(v, on){
+  return '<div class="row" style="align-items:center"><label>颜色</label><div class="swatches" data-f="color">'
+    + COLORS.map(c => '<span class="sw' + (c === v ? ' on' : '') + '" data-c="' + c + '" style="background:' + c + '"></span>').join('')
+    + '</div></div>';
+}
+
+/* 面板绑定：输入即改，不重建面板（否则丢焦点） */
+function wirePanel(target){
+  const body = $('panelBody');
+  body.querySelectorAll('[data-f]').forEach(inp => {
+    const f = inp.dataset.f;
+    if (f === 'color'){
+      inp.querySelectorAll('.sw').forEach(sw => sw.onclick = () => {
+        target.color = sw.dataset.c;
+        inp.querySelectorAll('.sw').forEach(s => s.classList.toggle('on', s === sw));
+        renderChart(); save();
+      });
+      return;
+    }
+    const handler = () => {
+      if (f === 'text') target.title !== undefined ? target.title = inp.value : target.name = inp.value;
+      if (f === 'note') target.note = inp.value;
+      if (f === 'date'){ if (inp.value) target.date !== undefined ? target.date = inp.value : (inp === body.querySelector('[data-f=date]') ? target.start = inp.value : target.end = inp.value); }
+      if (f === 'side') target.side = inp.value;
+      if (f === 'dist') target.dist = Math.max(34, Math.min(1200, Number(inp.value) || 80));
+      renderChart(); save();
+    };
+    inp.addEventListener('input', handler);
+    inp.addEventListener('change', handler);
+  });
+  // 阶段的两个日期框分开绑定
+  if (target.start !== undefined){
+    const ds = body.querySelectorAll('input[type=date]');
+    if (ds[0]) ds[0].onchange = () => { if (ds[0].value) target.start = ds[0].value; renderChart(); save(); };
+    if (ds[1]) ds[1].onchange = () => { if (ds[1].value) target.end = ds[1].value; renderChart(); save(); };
+  }
+}
+
+/* ---------- 增删 ---------- */
+function addEventAt(dateStr){
+  const l = cur();
+  const e = { id: uid(), title: '新节点', date: dateStr || todayStr(), note: '',
+              side: 'auto', color: COLORS[l.events.length % COLORS.length] };
+  l.events.push(e); save();
+  select('event', e.id);
+  renderPanel();
+  setTimeout(() => { const i = document.querySelector('#panelBody input[data-f=text]'); if (i){ i.focus(); i.select(); } }, 20);
+  return e;
+}
+function addPhase(){
+  const l = cur();
+  const base = l.events.length ? l.events[0].date : todayStr();
+  const p = { id: uid(), name: '新阶段', start: base, end: fromT(toT(base) + 30*DAY), color: COLORS[l.phases.length % COLORS.length] };
+  l.phases.push(p); save();
+  select('phase', p.id);
+}
+
+function addMarker(){
+  const l = cur();
+  const base = l.events.length ? l.events[Math.floor(l.events.length/2)].date : todayStr();
+  const m = { id: uid(), name: '新标记', date: base, color: COLORS[(l.markers.length + 2) % COLORS.length] };
+  l.markers.push(m); save();
+  select('marker', m.id);
+}
+
+/* ---------- 画布交互 ---------- */
+function stageRect(){ return stage.getBoundingClientRect(); }
+function worldToScreen(x, y){ return { x: x * view.k + view.x, y: y * view.k + view.y }; }
+function screenDate(sx){
+  const r = stageRect();
+  const wx = (sx - r.left - view.x) / view.k;
+  return fromT(LAY.t0 + (wx - LAY.x0) / LAY.kx * DAY);
+}
+
+stage.addEventListener('pointerdown', e => {
+  if (e.target.closest('.node') || e.target.closest('g#bands')) return;
+  dragging = { mode:'pan', x:e.clientX, y:e.clientY, vx:view.x, vy:view.y, moved:0 };
+  stage.classList.add('dragging');
+  stage.setPointerCapture(e.pointerId);
+});
+stage.addEventListener('pointermove', e => {
+  if (!dragging) return;
+  if (dragging.mode === 'pan'){
+    dragging.moved += Math.abs(e.clientX - dragging.x) + Math.abs(e.clientY - dragging.y);
+    view.x = dragging.vx + (e.clientX - dragging.x);
+    view.y = dragging.vy + (e.clientY - dragging.y);
+    applyView();
+  } else if (dragging.mode === 'node'){
+    const dx = (e.clientX - dragging.x) / view.k;
+    const dy = (e.clientY - dragging.y) / view.k;
+    dragging.g.setAttribute('transform', 'translate(' + dx + ',' + dy + ')');
+    dragging.dx = dx; dragging.dy = dy;
+  } else if (dragging.mode === 'marker'){
+    const dx = (e.clientX - dragging.x) / view.k;
+    dragging.g.setAttribute('transform', 'translate(' + dx + ',0)');
+    dragging.dx = dx;
+  }
+});
+stage.addEventListener('pointerup', e => {
+  if (!dragging) return;
+  const d = dragging; dragging = null; stage.classList.remove('dragging');
+  if (d.mode === 'pan'){
+    if (d.moved < 5){
+      const r = stageRect();
+      const wy = (e.clientY - r.top - view.y) / view.k;
+      if (Math.abs(wy * view.k) < 14){
+        const now = Date.now();
+        if (!d.last || now - (window.__lastInsert || 0) > 350){
+          window.__lastInsert = now;
+          addEventAt(screenDate(e.clientX));
+        }
+      } else { select(null); }
+    }
+  } else if (d.mode === 'marker'){
+    if (Math.abs(d.dx || 0) > 2){
+      const mk = (cur().markers || []).find(x => x.id === d.id);
+      if (mk){ mk.date = fromT(LAY.t0 + ((d.mx + (d.dx || 0)) - LAY.x0) / LAY.kx * DAY); save(); }
+      sel = { type:'marker', id:d.id };
+      renderChart(); renderPanel();
+    } else {
+      select('marker', d.id);
+    }
+  } else if (d.mode === 'node'){
+    if (Math.abs(d.dx || 0) > 2 || Math.abs(d.dy || 0) > 2){
+      const ev = cur().events.find(x => x.id === d.id);
+      if (ev){
+        const cx = d.cx + (d.dx || 0), cy = d.cy + (d.dy || 0);
+        ev.date = fromT(LAY.t0 + (cx - LAY.x0) / LAY.kx * DAY);
+        ev.side = cy < 0 ? 'up' : 'down';
+        ev.dist = Math.max(34, Math.min(1200, Math.abs(cy)));
+        save();
+      }
+      renderChart(); renderPanel();
+    } else {
+      select('event', d.id);
+    }
+  }
+});
+stage.addEventListener('wheel', e => {
+  e.preventDefault();
+  const r = stageRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  const k2 = Math.min(3.2, Math.max(0.25, view.k * (e.deltaY < 0 ? 1.12 : 1/1.12)));
+  view.x = mx - (mx - view.x) * (k2 / view.k);
+  view.y = my - (my - view.y) * (k2 / view.k);
+  view.k = k2; applyView();
+}, { passive:false });
+stage.addEventListener('dblclick', e => {
+  const r = stageRect();
+  const wy = (e.clientY - r.top - view.y) / view.k;
+  if (Math.abs(wy * view.k) > 22) fitView();
+});
+
+function startMarkerDrag(ev, m, g){
+  ev.stopPropagation();
+  dragging = { mode:'marker', id:m.id, g, x:ev.clientX, dx:0, mx:m.x };
+  try { stage.setPointerCapture(ev.pointerId); } catch (err) {}
+}
+
+function startNodeDrag(ev, e, g){
+  ev.stopPropagation();
+  dragging = { mode:'node', id:e.id, g, x:ev.clientX, y:ev.clientY,
+               dx:0, dy:0, cx:e.x, cy:e.y };
+  try { stage.setPointerCapture(ev.pointerId); } catch (err) {}
+}
+
+function fitView(){
+  const box = world.getBBox();
+  const w = stage.clientWidth, h = stage.clientHeight;
+  const k = Math.max(0.5, Math.min((w - 70) / Math.max(1, box.width), (h - 70) / Math.max(1, box.height), 1.4));
+  view.k = k;
+  view.x = w/2 - (box.x + box.width/2) * k;
+  view.y = h/2 - (box.y + box.height/2) * k;
+  applyView();
+}
+
+/* ---------- 导出 PNG ---------- */
+function svgExportString(){
+  layout(); renderChart();
+  const box = world.getBBox();
+  const padX = 46, padY = 46;
+  const W = Math.ceil(box.width + padX*2), H = Math.ceil(box.height + padY*2);
+  const bg = cssVar('--bg'), text = cssVar('--text'), muted = cssVar('--muted');
+  const line = cssVar('--line'), nodeBg = cssVar('--node-bg'), nodeSel = cssVar('--node-sel');
+  const axis = cssVar('--axis');
+  const style = '<style>'
+    + 'text{font-family:"Microsoft YaHei UI","Segoe UI",sans-serif}'
+    + '#spine{stroke:' + axis + ';stroke-width:6;stroke-linecap:round}'
+    + '.tick{stroke:' + line + ';stroke-width:1;opacity:.65}'
+    + '.tick-t{fill:' + muted + ';font-size:11px;text-anchor:middle}'
+    + '.tick-y{fill:' + muted + ';font-size:10.5px;text-anchor:middle;opacity:.85}'
+    + '.mk-line{stroke-width:1.8;stroke-dasharray:6 5;stroke-opacity:.9}'
+    + '.mk-t{font-size:11px;font-weight:600;text-anchor:middle}'
+    + '.band{opacity:.22}.band-t{font-size:11px;opacity:.9}'
+    + '.stem{stroke-width:2;stroke-opacity:.65;stroke-linecap:round}'
+    + '.knob{stroke-width:2}'
+    + '.node rect.box{stroke-width:1.4;stroke-opacity:.6}'
+    + '.node text.t{font-size:13px}.node text.d{font-size:10.5px}'
+    + '</style>';
+  const clone = world.cloneNode(true);
+  const inner = clone.innerHTML;
+  const s = '<?xml version="1.0" encoding="UTF-8"?>'
+    + '<svg xmlns="' + NS + '" width="' + W + '" height="' + H + '" viewBox="'
+    + (box.x - padX) + ' ' + (box.y - padY) + ' ' + W + ' ' + H + '">'
+    + style
+    + '<rect x="' + (box.x - padX) + '" y="' + (box.y - padY) + '" width="' + W + '" height="' + H + '" fill="' + bg + '"/>'
+    + inner + '</svg>';
+  return { svg:s, W, H };
+}
+
+function exportPNG(){
+  const l = cur();
+  const { svg:str, W, H } = svgExportString();
+  const scale = 2;
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const cv = document.createElement('canvas');
+        cv.width = Math.min(12000, W * scale); cv.height = Math.min(12000, H * scale);
+        const cx = cv.getContext('2d');
+        cx.drawImage(img, 0, 0, cv.width, cv.height);
+        cv.toBlob(b => { if (!b) return reject(new Error('PNG 生成失败'));
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(b);
+          a.download = (l.name || 'timeline') + '-' + todayStr() + '.png';
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+          resolve(b);
+        }, 'image/png');
+      } catch (err){ reject(err); }
+    };
+    img.onerror = () => reject(new Error('SVG 载入失败'));
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(str);
+  });
+}
+
+/* ---------- 多份管理 / 导入导出 ---------- */
+function refreshListSel(){
+  const s = $('listSel');
+  s.innerHTML = DB.lists.map(l => '<option value="' + l.id + '"' + (l.id === curId ? ' selected' : '') + '>' + esc(l.name) + '</option>').join('');
+}
+function switchList(id){
+  curId = id; sel = null;
+  refreshListSel(); renderChart(); renderPanel(); save();
+  setTimeout(fitView, 30);
+}
+
+$('listSel').onchange = e => switchList(e.target.value);
+$('btnAddEvent').onclick = () => addEventAt(todayStr());
+$('btnAddPhase').onclick = () => addPhase();
+$('btnAddMark').onclick = () => addMarker();
+
+document.querySelector('header').addEventListener('click', e => {
+  const act = e.target.dataset.act; if (!act) return;
+  if (act === 'fit') fitView();
+  if (act === 'in'){ view.k = Math.min(3.2, view.k * 1.25); applyView(); }
+  if (act === 'out'){ view.k = Math.max(0.25, view.k / 1.25); applyView(); }
+  if (act === 'today'){
+    const x = LAY.x0 + (Date.now() - LAY.t0) / DAY * LAY.kx;
+    view.x = stage.clientWidth/2 - x * view.k; view.y = stage.clientHeight/2; applyView();
+  }
+  if (act === 'theme'){
+    const light = document.body.dataset.theme === 'light';
+    document.body.dataset.theme = light ? 'dark' : 'light';
+    e.target.textContent = light ? '浅色' : '深色';
+    renderChart(); if (sel) renderPanel();
+  }
+  if (act === 'newList'){
+    const name = prompt('新时间轴叫什么？', '新时间轴');
+    if (name !== null && name.trim() !== ''){ newList(name.trim()); refreshListSel(); switchList(curId); }
+  }
+  if (act === 'renameList'){
+    const l = cur(); const name = prompt('重命名', l.name);
+    if (name !== null && name.trim() !== ''){ l.name = name.trim(); refreshListSel(); save(); }
+  }
+  if (act === 'delList'){
+    if (DB.lists.length <= 1) return alert('至少保留一份时间轴。');
+    const l = cur();
+    if (!confirm('删除「' + l.name + '」？删了就找不回来了。')) return;
+    DB.lists = DB.lists.filter(x => x.id !== l.id);
+    curId = DB.lists[0].id;
+    switchList(curId);
+  }
+  if (act === 'png') exportPNG().catch(err => alert('导出失败：' + err.message));
+  if (act === 'jsonOut'){
+    const blob = new Blob([JSON.stringify(DB, null, 2)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'timeline-backup-' + todayStr() + '.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+  if (act === 'jsonIn') $('fileIn').click();
+});
+
+$('fileIn').onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  const fr = new FileReader();
+  fr.onload = () => {
+    try {
+      const o = JSON.parse(fr.result);
+      if (!o || !Array.isArray(o.lists)) throw new Error('不是时间轴备份文件');
+      DB = o; curId = DB.lists[0].id;
+      refreshListSel(); switchList(curId);
+    } catch (err){ alert('导入失败：' + err.message); }
+  };
+  fr.readAsText(f);
+  e.target.value = '';
+};
+
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === '0') fitView();
+  if (e.key === '+' || e.key === '='){ view.k = Math.min(3.2, view.k * 1.2); applyView(); }
+  if (e.key === '-'){ view.k = Math.max(0.25, view.k / 1.2); applyView(); }
+  if (e.key === 'Escape') select(null);
+});
+
+/* ---------- 启动 ---------- */
+// localStorage 可用性检查（file:// 某些配置下会被禁）
+let canStore = true;
+try { localStorage.setItem('__t','1'); localStorage.removeItem('__t'); } catch (e) { canStore = false; }
+if (!canStore){
+  const w = document.createElement('div');
+  w.style.cssText = 'padding:6px 12px;background:#7a3b3b;color:#fff;font-size:12px';
+  w.textContent = '浏览器禁止本地存储：这次改的内容不会被保存。请改用「备份 JSON」保存，或把本文件放到 http 服务下打开。';
+  document.querySelector('header').after(w);
+}
+
+loadDB();
+refreshListSel();
+renderChart();
+renderPanel();
+setTimeout(fitView, 30);
+
+/* 测试挂钩（不影响正常使用） */
+window.__tl = {
+  get db(){ return DB; },
+  get sel(){ return sel; },
+  addEventAt, addPhase, exportPNG, svgExportString, switchList, renderChart, renderPanel,
+  select, fitView
+};
+</script>
+</body>
+</html>
