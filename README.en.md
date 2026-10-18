@@ -99,8 +99,46 @@ The app now calls the **File System Access API** (`showSaveFilePicker`) first, s
 
 To unblock files you already have:
 
-- Right-click the file → Properties → tick **Unblock** at the bottom → OK
+- Right-click the file → **General** tab → at the bottom, next to "Security: This file came from another computer and might be blocked" → tick **Unblock** → Apply / OK
 - PowerShell: `Get-ChildItem "$HOME\Downloads\*.png" | Unblock-File`
+
+Both do the same thing: delete the `Zone.Identifier` NTFS alternate data stream. The file content is untouched (verified: tag a file with `ZoneId=4`, unblock it, the stream disappears and the bytes stay identical).
+
+### Why it keeps coming back
+
+Every **new download** is tagged again, and a file with the same name is not overwritten — the browser writes a copy like `xxx (1).png`, which is a new file and carries the mark as well. So with an older build of this app, or a browser without `showSaveFilePicker`, the problem reappears on every export. The current build writes straight to disk and produces no mark.
+
+### No checkbox, or ticking it does nothing
+
+| Situation | What you see | What to do |
+| --- | --- | --- |
+| File on a USB stick (FAT32/exFAT) or a network path | Alternate data streams cannot be stored, so there is no mark at all | Nothing to unblock; it will not be blocked |
+| File is read-only or held open by another program | Applying the change fails | Clear read-only / close the program, then retry |
+| Group policy or a security product disabled Attachment Manager | The security line is missing entirely | Allow it in Windows Security, or use PowerShell |
+| Still blocked after ticking | Explorer caches the state | Reopen the Properties dialog, or use `Unblock-File` |
+| Blocked by Smart App Control / Controlled folder access | There is no checkbox at all | This is not a zone-mark issue — allow it in Windows Security |
+
+To check whether a file is tagged:
+
+```powershell
+Get-Item "$HOME\Downloads\timeline-2026-10-18.png" -Stream Zone.Identifier
+```
+
+### Security boundary: never unblock programs
+
+Mark-of-the-Web is a **trust signal**. SmartScreen reputation checks, Defender ASR rules (e.g. "Block executable content from email and webmail"), Office Protected View and script-host origin checks all depend on it.
+
+- ✅ Unblocking **data files** (png / jpg / pdf / txt) has negligible impact; the real risk with images is decoder vulnerabilities, which are unrelated to the mark
+- ❌ Unblocking **exe / msi / ps1 / bat / js / hta / docm / xlsm** bypasses those protections by hand — don't
+- ❌ Don't add your downloads folder to Defender exclusions or turn off "Open File - Security Warning" just to make images open
+
+### Note: storage sharing under `file://`
+
+When the app is opened as a local file, all local HTML documents share one storage origin, so **any other local HTML file you open can read and modify this app's data**.
+
+- Only open local HTML files you generated or can read through
+- Export the JSON backup regularly (files on disk are unaffected)
+- This app makes no network requests at all (no `fetch` / `XMLHttpRequest` / external scripts), so it never sends data anywhere
 
 ## Limitations
 
