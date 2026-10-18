@@ -4,7 +4,9 @@
 
 一个**双击即用**的交互式时间轴工具：单文件 HTML、零依赖、离线可用。用鼠标在浏览器里直接排计划，导出一张 PNG 就能贴进笔记或发给别人。
 
-![预览](screenshots/preview-dark.png)
+![深色主题](screenshots/preview-dark.png)
+
+![浅色主题](screenshots/preview-light.png)
 
 ## 特性
 
